@@ -1,4 +1,4 @@
-const PUPPETDB_URL = 'https://puppet.emudhra.local:8081';
+const PUPPETDB_URL = import.meta.env.VITE_PUPPETDB_URL || 'http://localhost:8082';
 
 export interface PuppetNode {
   certname: string;
