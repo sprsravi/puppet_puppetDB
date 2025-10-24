@@ -106,7 +106,7 @@ const AppContent: React.FC = () => {
 
             <div className="flex items-center space-x-4">
               <div className="hidden md:block text-right">
-                <p className="text-sm font-medium text-slate-800">{user?.full_name}</p>
+                <p className="text-sm font-medium text-slate-800">{user?.fullName}</p>
                 <p className="text-xs text-slate-500 capitalize">{user?.role}</p>
               </div>
               <button
@@ -151,7 +151,7 @@ const AppContent: React.FC = () => {
               })}
               <div className="pt-3 border-t border-slate-200">
                 <div className="px-4 py-2">
-                  <p className="text-sm font-medium text-slate-800">{user?.full_name}</p>
+                  <p className="text-sm font-medium text-slate-800">{user?.fullName}</p>
                   <p className="text-xs text-slate-500 capitalize">{user?.role}</p>
                 </div>
               </div>
@@ -168,7 +168,7 @@ const AppContent: React.FC = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="flex flex-col md:flex-row items-center justify-between space-y-4 md:space-y-0">
             <div className="text-sm text-slate-600">
-              Connected to: <span className="font-mono text-slate-800">puppet.emudhra.local:8081</span>
+              Connected to: <span className="font-mono text-slate-800">localhost:8080</span>
             </div>
             <div className="text-sm text-slate-500">
               Puppet Master Web UI - Self-hosted Infrastructure Management

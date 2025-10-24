@@ -1,11 +1,11 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { supabase, User } from '../lib/supabase';
+import { User, initializeUsers, login as authLogin, logout as authLogout, getCurrentUser } from '../lib/auth';
 
 interface AuthContextType {
   user: User | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
-  logout: () => Promise<void>;
+  login: (username: string, password: string) => Promise<void>;
+  logout: () => void;
   isAuthenticated: boolean;
 }
 
@@ -28,86 +28,23 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    checkSession();
+    initializeUsers();
+    const currentUser = getCurrentUser();
+    setUser(currentUser);
+    setLoading(false);
   }, []);
 
-  const checkSession = async () => {
-    try {
-      const { data: { user: authUser } } = await supabase.auth.getUser();
-
-      if (authUser) {
-        const { data: userData } = await supabase
-          .from('users')
-          .select('*')
-          .eq('email', authUser.email)
-          .maybeSingle();
-
-        if (userData) {
-          setUser(userData);
-        }
-      }
-    } catch (error) {
-      console.error('Session check error:', error);
-    } finally {
-      setLoading(false);
+  const login = async (username: string, password: string) => {
+    const authenticatedUser = authLogin(username, password);
+    if (!authenticatedUser) {
+      throw new Error('Invalid username or password');
     }
+    setUser(authenticatedUser);
   };
 
-  const login = async (email: string, password: string) => {
-    try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-
-      if (error) throw error;
-
-      if (data.user) {
-        const { data: userData } = await supabase
-          .from('users')
-          .select('*')
-          .eq('email', email)
-          .maybeSingle();
-
-        if (userData) {
-          await supabase
-            .from('users')
-            .update({ last_login: new Date().toISOString() })
-            .eq('id', userData.id);
-
-          await supabase.from('audit_logs').insert({
-            user_id: userData.id,
-            action: 'login',
-            resource: 'auth',
-            details: { email, timestamp: new Date().toISOString() },
-          });
-
-          setUser(userData);
-        }
-      }
-    } catch (error) {
-      console.error('Login error:', error);
-      throw error;
-    }
-  };
-
-  const logout = async () => {
-    try {
-      if (user) {
-        await supabase.from('audit_logs').insert({
-          user_id: user.id,
-          action: 'logout',
-          resource: 'auth',
-          details: { timestamp: new Date().toISOString() },
-        });
-      }
-
-      await supabase.auth.signOut();
-      setUser(null);
-    } catch (error) {
-      console.error('Logout error:', error);
-      throw error;
-    }
+  const logout = () => {
+    authLogout();
+    setUser(null);
   };
 
   return (

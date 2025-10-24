@@ -1,14 +1,14 @@
 # Puppet Master Web UI
 
-A modern, self-hosted web interface for managing Puppet infrastructure with PuppetDB integration.
+A modern, self-hosted web interface for managing Puppet infrastructure with PuppetDB integration. Simple deployment with no external dependencies.
 
 ## Features
 
 ### Authentication & Security
-- Secure login/logout with session management
+- Simple username/password authentication
+- Local browser storage (no database required)
 - Role-based access control (Admin, Operator, Viewer)
-- Audit logging for compliance
-- Supabase-powered authentication
+- Default admin account included
 
 ### Dashboard
 - Real-time infrastructure overview
@@ -21,33 +21,85 @@ A modern, self-hosted web interface for managing Puppet infrastructure with Pupp
 - Status-based filtering (unchanged, changed, failed)
 - Detailed node information viewer
 - Environment tracking
-- Timestamp monitoring for catalogs, facts, and reports
 
 ### Reports Viewer
 - Browse all Puppet run reports
 - Filter by status and node name
-- Detailed report information (duration, timestamps, versions)
-- Transaction and catalog tracking
+- Detailed report information
+- Transaction tracking
 
 ### Facts Browser
 - Browse all available fact names
 - View fact values across all nodes
 - Search and filter capabilities
-- Support for complex fact values with JSON display
-- Environment-specific fact viewing
+- JSON display for complex facts
 
 ### PuppetDB Query Interface
 - Direct PuppetDB query execution
 - Pre-built example queries
-- JSON syntax highlighting for results
-- Query documentation integration
+- JSON results viewer
 
-### Additional Features
-- Responsive design (mobile & desktop)
-- Clean, modern UI with professional styling
-- Direct PuppetDB REST API integration
-- Comprehensive error handling
-- Real-time data updates
+## Quick Start
+
+### Prerequisites
+
+- Ubuntu 22.04 (or similar Linux)
+- Puppet Master with PuppetDB running on `http://localhost:8080`
+- Node.js 18+ and npm
+- Nginx web server
+
+### Installation (3 Steps)
+
+**1. Install dependencies:**
+```bash
+# Install Node.js
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt install -y nodejs nginx
+
+# Navigate to project
+cd /path/to/puppet-ui
+
+# Install packages
+npm install
+```
+
+**2. Build and deploy:**
+```bash
+# Build production version
+npm run build
+
+# Copy to web directory
+sudo mkdir -p /var/www/puppet-ui
+sudo cp -r dist/* /var/www/puppet-ui/
+```
+
+**3. Configure Nginx:**
+```bash
+sudo tee /etc/nginx/sites-available/puppet-ui > /dev/null << 'EOF'
+server {
+    listen 80;
+    server_name _;
+
+    root /var/www/puppet-ui;
+    index index.html;
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}
+EOF
+
+sudo ln -s /etc/nginx/sites-available/puppet-ui /etc/nginx/sites-enabled/
+sudo rm /etc/nginx/sites-enabled/default
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+**4. Access:**
+Open browser: `http://your-server-ip`
+
+**Default login:**
+- Username: `admin`
+- Password: `admin123`
 
 ## Architecture
 
@@ -55,139 +107,85 @@ A modern, self-hosted web interface for managing Puppet infrastructure with Pupp
 ┌─────────────────┐
 │   Web Browser   │
 └────────┬────────┘
-         │ HTTPS
+         │ HTTP
          ▼
 ┌─────────────────┐
 │  Nginx Server   │
-│  (Port 80/443)  │
+│  (Port 80)      │
 └────────┬────────┘
          │
-    ┌────┴────┐
-    │         │
-    ▼         ▼
-┌─────────┐ ┌──────────────┐
-│ React   │ │ Nginx Proxy  │
-│ Web UI  │ │ (Port 8082)  │
-└─────────┘ └──────┬───────┘
-                   │
-    ┌──────────────┴──────────────┐
-    │                             │
-    ▼                             ▼
-┌──────────┐              ┌─────────────┐
-│ Supabase │              │  PuppetDB   │
-│   Auth   │              │   :8081     │
-└──────────┘              └─────────────┘
+         ▼
+┌─────────────────┐
+│  React Web UI   │
+│  (Static Files) │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│    PuppetDB     │
+│  localhost:8080 │
+└─────────────────┘
 ```
 
-## Quick Start
+## Configuration
 
-### Prerequisites
+### PuppetDB URL
 
-- Ubuntu 22.04 server
-- Puppet Master installed and running
-- PuppetDB accessible at `https://puppet.emudhra.local:8081`
-- Supabase account
+The application connects to PuppetDB at `http://localhost:8080`. To change this:
 
-### Installation
+Edit `src/services/puppetdb.ts`:
+```typescript
+const PUPPETDB_URL = 'http://your-puppetdb-url:port';
+```
 
-1. **Run the setup script:**
-   ```bash
-   chmod +x scripts/setup.sh
-   ./scripts/setup.sh
-   ```
+Then rebuild:
+```bash
+npm run build
+sudo cp -r dist/* /var/www/puppet-ui/
+```
 
-2. **Create admin user in Supabase:**
-   - Go to Supabase Dashboard → Authentication → Users
-   - Add a new user
-   - Run the SQL from `scripts/create-user.sql`
+### User Management
 
-3. **Access the application:**
-   ```
-   http://your-server-ip
-   ```
+Users are stored in browser localStorage. To manage users:
 
-For detailed instructions, see [QUICKSTART.md](QUICKSTART.md)
+**Add a new user (in browser console - F12):**
+```javascript
+// Import the auth module functions
+const { addUser } = await import('./lib/auth.js');
 
-## Documentation
+// Add user
+addUser('username', 'password', 'Full Name', 'admin');
+// Roles: 'admin', 'operator', 'viewer'
+```
 
-- **[QUICKSTART.md](QUICKSTART.md)** - Fast deployment guide with troubleshooting
-- **[DEPLOYMENT.md](DEPLOYMENT.md)** - Comprehensive production deployment guide
-- **[scripts/create-user.sql](scripts/create-user.sql)** - SQL for creating user accounts
+**Change password:**
+```javascript
+const { changePassword } = await import('./lib/auth.js');
+changePassword('username', 'newpassword');
+```
+
+**Delete user:**
+```javascript
+const { deleteUser } = await import('./lib/auth.js');
+deleteUser('username');
+```
 
 ## Technology Stack
 
 - **Frontend**: React 18, TypeScript, Vite
 - **Styling**: Tailwind CSS
 - **Icons**: Lucide React
-- **Authentication**: Supabase Auth
-- **Database**: Supabase PostgreSQL
+- **Authentication**: LocalStorage-based
 - **Backend API**: PuppetDB REST API
 - **Web Server**: Nginx
-- **State Management**: React Context API
-
-## Project Structure
-
-```
-puppet-ui/
-├── src/
-│   ├── components/          # React components
-│   │   ├── Dashboard.tsx    # Main dashboard
-│   │   ├── Nodes.tsx        # Node management
-│   │   ├── Reports.tsx      # Report viewer
-│   │   ├── Facts.tsx        # Facts browser
-│   │   ├── Query.tsx        # Query interface
-│   │   └── Login.tsx        # Authentication
-│   ├── contexts/
-│   │   └── AuthContext.tsx  # Authentication state
-│   ├── services/
-│   │   └── puppetdb.ts      # PuppetDB API client
-│   ├── lib/
-│   │   └── supabase.ts      # Supabase client
-│   ├── App.tsx              # Main application
-│   └── main.tsx             # Application entry
-├── scripts/
-│   ├── setup.sh             # Automated setup script
-│   └── create-user.sql      # User creation SQL
-├── QUICKSTART.md            # Quick start guide
-├── DEPLOYMENT.md            # Full deployment guide
-└── README.md                # This file
-```
-
-## Configuration
-
-### Environment Variables
-
-Create a `.env` file with:
-
-```env
-VITE_SUPABASE_URL=https://your-project.supabase.co
-VITE_SUPABASE_ANON_KEY=your-anon-key
-VITE_PUPPETDB_URL=http://localhost:8082
-```
-
-### PuppetDB Configuration
-
-The application connects to PuppetDB through an Nginx proxy to handle CORS. Configuration is in:
-- `/etc/nginx/sites-available/puppetdb-proxy`
 
 ## Development
-
-### Prerequisites
-
-- Node.js 18+
-- npm or yarn
 
 ### Setup
 
 ```bash
-# Install dependencies
 npm install
-
-# Start development server
 npm run dev
-
-# Build for production
-npm run build
 ```
 
 ### Available Scripts
@@ -197,40 +195,40 @@ npm run build
 - `npm run preview` - Preview production build
 - `npm run lint` - Run ESLint
 
+## Deployment
+
+### Production Deployment
+
+1. **Build the application:**
+   ```bash
+   npm run build
+   ```
+
+2. **Deploy to web server:**
+   ```bash
+   sudo cp -r dist/* /var/www/puppet-ui/
+   ```
+
+3. **Restart Nginx:**
+   ```bash
+   sudo systemctl reload nginx
+   ```
+
+### Optional: HTTPS Setup
+
+```bash
+# Install Certbot
+sudo apt install certbot python3-certbot-nginx
+
+# Get certificate
+sudo certbot --nginx -d your-domain.com
+```
+
 ## User Roles
 
-### Admin
-- Full access to all features
-- Can view all nodes, reports, and facts
-- Can execute custom queries
-- View audit logs
-
-### Operator
-- Read and write access
-- Can view nodes, reports, and facts
-- Limited administrative functions
-
-### Viewer
-- Read-only access
-- Can view all data
-- Cannot modify settings or execute queries
-
-## Security Features
-
-- Secure authentication with Supabase
-- Row Level Security (RLS) policies
-- Session management with expiration
-- Audit logging for all actions
-- HTTPS support (with SSL configuration)
-- CORS protection
-- Security headers (X-Frame-Options, X-Content-Type-Options)
-
-## Browser Support
-
-- Chrome/Edge (latest)
-- Firefox (latest)
-- Safari (latest)
-- Mobile browsers (iOS Safari, Chrome Mobile)
+- **Admin**: Full access to all features
+- **Operator**: Can view and manage nodes
+- **Viewer**: Read-only access
 
 ## Troubleshooting
 
@@ -238,61 +236,78 @@ npm run build
 
 ```bash
 # Test PuppetDB directly
-curl -k https://puppet.emudhra.local:8081/pdb/query/v4/nodes
+curl http://localhost:8080/pdb/query/v4/nodes
 
-# Test proxy
-curl http://localhost:8082/pdb/query/v4/nodes
+# Check if PuppetDB is running
+sudo systemctl status puppetdb
 
-# Check logs
-sudo tail -f /var/log/nginx/error.log
+# Check PuppetDB logs
+sudo journalctl -u puppetdb -f
 ```
 
 ### Login issues
 
-```sql
--- Verify user exists in Supabase SQL Editor
-SELECT * FROM users WHERE email = 'your-email@example.com';
+If you can't login:
+- Default credentials: `admin` / `admin123`
+- Clear browser localStorage (F12 → Application → Local Storage → Clear)
+- Refresh the page
+
+### White screen after login
+
+Check browser console (F12) for errors:
+- Usually a PuppetDB connection issue
+- Verify PuppetDB is accessible at `localhost:8080`
+
+## Security
+
+### Change Default Password
+
+**IMPORTANT**: Change the default admin password after first login!
+
+In browser console (F12):
+```javascript
+const { changePassword } = await import('./lib/auth.js');
+changePassword('admin', 'your-secure-password');
 ```
 
-For more troubleshooting, see [QUICKSTART.md](QUICKSTART.md#troubleshooting)
+### Security Best Practices
+
+1. Change default password immediately
+2. Use HTTPS in production (see Optional HTTPS Setup)
+3. Restrict access with firewall rules
+4. Keep system packages updated
+5. Use strong passwords for all accounts
+
+## Browser Support
+
+- Chrome/Edge (latest)
+- Firefox (latest)
+- Safari (latest)
+- Mobile browsers
 
 ## Performance
 
-- Optimized production build with Vite
-- Gzip compression enabled
-- Static asset caching (1 year)
-- Code splitting for faster loads
-- Lazy loading for components
+- Optimized production build
+- Gzip compression
+- Static asset caching
+- Code splitting
 
 ## Maintenance
 
-### Regular Tasks
+```bash
+# Update application
+cd /path/to/puppet-ui
+npm update
+npm run build
+sudo cp -r dist/* /var/www/puppet-ui/
 
-1. **Update packages:**
-   ```bash
-   cd /var/www/puppet-ui
-   npm update
-   npm audit fix
-   npm run build
-   ```
+# View Nginx logs
+sudo tail -f /var/log/nginx/access.log
+sudo tail -f /var/log/nginx/error.log
 
-2. **Monitor logs:**
-   ```bash
-   sudo tail -f /var/log/nginx/access.log
-   sudo tail -f /var/log/nginx/error.log
-   ```
-
-3. **Backup database:**
-   - Use Supabase dashboard for automated backups
-
-4. **Update SSL certificates:**
-   ```bash
-   sudo certbot renew
-   ```
-
-## Contributing
-
-This is a self-hosted application for your infrastructure. Feel free to customize it for your needs.
+# Restart Nginx
+sudo systemctl restart nginx
+```
 
 ## License
 
@@ -300,20 +315,10 @@ This project is provided as-is for infrastructure management purposes.
 
 ## Support
 
-For issues or questions:
-- Check [QUICKSTART.md](QUICKSTART.md) for common solutions
-- Review [DEPLOYMENT.md](DEPLOYMENT.md) for detailed setup
+- Check browser console (F12) for errors
+- Verify PuppetDB is running and accessible
 - Consult [PuppetDB API docs](https://puppet.com/docs/puppetdb/latest/api/)
-- Check [Supabase documentation](https://supabase.com/docs)
-
-## Acknowledgments
-
-- Built with React and TypeScript
-- Styled with Tailwind CSS
-- Icons by Lucide
-- Authentication by Supabase
-- Infrastructure management by Puppet
 
 ---
 
-**Ready to manage your Puppet infrastructure with style!**
+**Simple, fast, and effective Puppet management!**

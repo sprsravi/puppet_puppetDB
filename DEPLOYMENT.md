@@ -1,220 +1,67 @@
-# Puppet Master Web UI - Production Deployment Guide
+# Puppet Master Web UI - Deployment Guide
 
-This guide provides step-by-step instructions to deploy your Puppet Master Web UI in production on Ubuntu 22.04.
+Simple deployment guide for your Puppet Master Web UI.
 
 ## Prerequisites
 
-- Ubuntu 22.04 server
-- Puppet Master installed and running
-- PuppetDB installed and accessible at `https://puppet.emudhra.local:8081`
-- Node.js 18+ and npm installed
-- Domain name or server IP address
-- SSL certificates (if using HTTPS)
+- Ubuntu 22.04 (or similar)
+- Puppet Master with PuppetDB running on **http://localhost:8080**
+- Root or sudo access
 
-## Step 1: Prepare the Server
+## Quick Deployment (5 Minutes)
 
-### 1.1 Update System Packages
+### Step 1: Install Requirements
 
 ```bash
-sudo apt update
-sudo apt upgrade -y
-```
-
-### 1.2 Install Node.js and npm
-
-```bash
-# Install Node.js 20.x LTS
+# Install Node.js 20
 curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
 sudo apt install -y nodejs
 
-# Verify installation
-node --version
-npm --version
-```
-
-### 1.3 Install Nginx (Web Server)
-
-```bash
+# Install Nginx
 sudo apt install -y nginx
+
+# Verify installations
+node --version  # Should show v20.x.x
+nginx -v        # Should show nginx version
 ```
 
-### 1.4 Install PM2 (Process Manager)
+### Step 2: Build the Application
 
 ```bash
-sudo npm install -g pm2
-```
+# Navigate to project directory
+cd /path/to/puppet-ui
 
-## Step 2: Configure PuppetDB for CORS
-
-Since the web UI will connect to PuppetDB from the browser, you need to configure CORS.
-
-### 2.1 Create Nginx Proxy for PuppetDB
-
-Create a new Nginx configuration file:
-
-```bash
-sudo nano /etc/nginx/sites-available/puppetdb-proxy
-```
-
-Add the following configuration:
-
-```nginx
-server {
-    listen 8082;
-    server_name localhost;
-
-    location / {
-        # Proxy to PuppetDB
-        proxy_pass https://puppet.emudhra.local:8081;
-        proxy_ssl_verify off;
-
-        # CORS headers
-        add_header 'Access-Control-Allow-Origin' '*' always;
-        add_header 'Access-Control-Allow-Methods' 'GET, POST, OPTIONS' always;
-        add_header 'Access-Control-Allow-Headers' 'Content-Type, Authorization, X-Client-Info, Apikey' always;
-
-        # Handle preflight requests
-        if ($request_method = 'OPTIONS') {
-            add_header 'Access-Control-Allow-Origin' '*';
-            add_header 'Access-Control-Allow-Methods' 'GET, POST, OPTIONS';
-            add_header 'Access-Control-Allow-Headers' 'Content-Type, Authorization, X-Client-Info, Apikey';
-            add_header 'Content-Length' 0;
-            add_header 'Content-Type' 'text/plain';
-            return 204;
-        }
-
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
-```
-
-Enable the configuration:
-
-```bash
-sudo ln -s /etc/nginx/sites-available/puppetdb-proxy /etc/nginx/sites-enabled/
-sudo nginx -t
-sudo systemctl reload nginx
-```
-
-### 2.2 Update PuppetDB URL in Application
-
-```bash
-# Navigate to your project directory
-cd /tmp/cc-agent/58524226/project
-
-# Update the PuppetDB URL
-nano src/services/puppetdb.ts
-```
-
-Change the URL from:
-```typescript
-const PUPPETDB_URL = 'https://puppet.emudhra.local:8081';
-```
-
-To:
-```typescript
-const PUPPETDB_URL = 'http://localhost:8082';
-```
-
-## Step 3: Set Up Supabase Authentication
-
-### 3.1 Create a User Account
-
-Sign up for the first user account using Supabase Auth:
-
-```bash
-# Using the Supabase CLI or via SQL in Supabase Dashboard
-# First, create the auth user in Supabase Dashboard:
-# Go to Authentication > Users > Add User
-# Email: admin@yourdomain.com
-# Password: (set a strong password)
-# Confirm email automatically
-```
-
-### 3.2 Add User to Database
-
-Run this SQL in your Supabase SQL Editor:
-
-```sql
--- Get the auth user ID first
-SELECT id, email FROM auth.users WHERE email = 'admin@yourdomain.com';
-
--- Insert into users table (replace the UUID with the actual auth.users.id)
-INSERT INTO users (id, email, full_name, role, is_active)
-VALUES (
-  '<auth-user-id-from-above>',
-  'admin@yourdomain.com',
-  'System Administrator',
-  'admin',
-  true
-);
-```
-
-Alternative method using Supabase Auth API:
-
-```sql
--- This automatically syncs with auth.users
-INSERT INTO users (email, full_name, role, is_active)
-SELECT email, 'System Administrator', 'admin', true
-FROM auth.users
-WHERE email = 'admin@yourdomain.com'
-ON CONFLICT (email) DO NOTHING;
-```
-
-## Step 4: Deploy the Application
-
-### 4.1 Clone or Copy the Project
-
-```bash
-# Create application directory
-sudo mkdir -p /var/www/puppet-ui
-sudo chown -R $USER:$USER /var/www/puppet-ui
-
-# Copy the project files
-cp -r /tmp/cc-agent/58524226/project/* /var/www/puppet-ui/
-cd /var/www/puppet-ui
-```
-
-### 4.2 Install Dependencies
-
-```bash
+# Install dependencies
 npm install
-```
 
-### 4.3 Build the Production Application
-
-```bash
+# Build production version
 npm run build
 ```
 
-This creates an optimized production build in the `dist` directory.
-
-## Step 5: Configure Nginx for the Web Application
-
-### 5.1 Create Nginx Configuration
+### Step 3: Deploy to Nginx
 
 ```bash
-sudo nano /etc/nginx/sites-available/puppet-ui
+# Create web directory
+sudo mkdir -p /var/www/puppet-ui
+
+# Copy built files
+sudo cp -r dist/* /var/www/puppet-ui/
+
+# Set permissions
+sudo chown -R www-data:www-data /var/www/puppet-ui
 ```
 
-Add the following configuration:
+### Step 4: Configure Nginx
 
-```nginx
+```bash
+# Create Nginx configuration
+sudo tee /etc/nginx/sites-available/puppet-ui > /dev/null << 'EOF'
 server {
     listen 80;
-    server_name your-domain.com;  # Replace with your domain or server IP
+    server_name _;
 
-    root /var/www/puppet-ui/dist;
+    root /var/www/puppet-ui;
     index index.html;
-
-    # Gzip compression
-    gzip on;
-    gzip_vary on;
-    gzip_min_length 1024;
-    gzip_types text/plain text/css text/xml text/javascript application/javascript application/json;
 
     location / {
         try_files $uri $uri/ /index.html;
@@ -225,275 +72,313 @@ server {
         expires 1y;
         add_header Cache-Control "public, immutable";
     }
-
-    # Security headers
-    add_header X-Frame-Options "SAMEORIGIN" always;
-    add_header X-Content-Type-Options "nosniff" always;
-    add_header X-XSS-Protection "1; mode=block" always;
 }
-```
+EOF
 
-### 5.2 Enable the Site
-
-```bash
+# Enable the site
 sudo ln -s /etc/nginx/sites-available/puppet-ui /etc/nginx/sites-enabled/
+
+# Remove default site
+sudo rm -f /etc/nginx/sites-enabled/default
+
+# Test configuration
 sudo nginx -t
+
+# Reload Nginx
 sudo systemctl reload nginx
 ```
 
-## Step 6: Configure SSL (HTTPS) - Recommended
-
-### 6.1 Install Certbot
+### Step 5: Configure Firewall
 
 ```bash
-sudo apt install -y certbot python3-certbot-nginx
-```
+# Allow HTTP
+sudo ufw allow 80/tcp
 
-### 6.2 Obtain SSL Certificate
+# If using HTTPS
+sudo ufw allow 443/tcp
 
-```bash
-sudo certbot --nginx -d your-domain.com
-```
-
-Follow the prompts to complete the SSL setup.
-
-## Step 7: Configure Firewall
-
-```bash
-# Allow HTTP and HTTPS
-sudo ufw allow 'Nginx Full'
-
-# Allow SSH (if not already allowed)
-sudo ufw allow ssh
-
-# Enable firewall
+# Enable firewall (if not already enabled)
 sudo ufw enable
 ```
 
-## Step 8: Test the Deployment
+### Step 6: Access the Application
 
-### 8.1 Check Nginx Status
+1. Open browser: `http://your-server-ip`
+2. Login with default credentials:
+   - **Username**: `admin`
+   - **Password**: `admin123`
 
-```bash
-sudo systemctl status nginx
+**IMPORTANT**: Change the admin password immediately!
+
+## Post-Installation
+
+### Change Default Password
+
+After logging in, open browser console (F12) and run:
+
+```javascript
+const { changePassword } = await import('./lib/auth.js');
+changePassword('admin', 'your-new-secure-password');
 ```
 
-### 8.2 Test PuppetDB Connectivity
+Then logout and login with your new password.
 
-```bash
-curl http://localhost:8082/pdb/query/v4/nodes
+### Add Additional Users
+
+In browser console (F12):
+
+```javascript
+const { addUser } = await import('./lib/auth.js');
+
+// Add an operator
+addUser('operator1', 'password123', 'Operator User', 'operator');
+
+// Add a viewer
+addUser('viewer1', 'password123', 'Viewer User', 'viewer');
 ```
 
-### 8.3 Access the Web UI
+## PuppetDB Configuration
 
-Open your browser and navigate to:
-- `http://your-domain.com` (or `http://your-server-ip`)
-- `https://your-domain.com` (if SSL is configured)
+The application expects PuppetDB at `http://localhost:8080`.
 
-### 8.4 Login
+### If Your PuppetDB is at a Different URL:
 
-Use the credentials you created in Step 3:
-- Email: admin@yourdomain.com
-- Password: (the password you set)
+1. Edit `src/services/puppetdb.ts`:
+   ```typescript
+   const PUPPETDB_URL = 'http://your-puppetdb-server:port';
+   ```
 
-## Step 9: Production Monitoring and Maintenance
+2. Rebuild and redeploy:
+   ```bash
+   npm run build
+   sudo cp -r dist/* /var/www/puppet-ui/
+   ```
 
-### 9.1 Monitor Nginx Logs
+### If PuppetDB Has CORS Issues:
 
-```bash
-# Access logs
-sudo tail -f /var/log/nginx/access.log
-
-# Error logs
-sudo tail -f /var/log/nginx/error.log
-```
-
-### 9.2 Set Up Log Rotation
-
-Nginx log rotation is configured by default. Verify:
+Create an Nginx proxy:
 
 ```bash
-cat /etc/logrotate.d/nginx
+sudo tee /etc/nginx/sites-available/puppetdb-proxy > /dev/null << 'EOF'
+server {
+    listen 8080;
+    server_name localhost;
+
+    location / {
+        proxy_pass http://your-actual-puppetdb:8080;
+
+        add_header 'Access-Control-Allow-Origin' '*' always;
+        add_header 'Access-Control-Allow-Methods' 'GET, POST, OPTIONS' always;
+        add_header 'Access-Control-Allow-Headers' 'Content-Type' always;
+
+        if ($request_method = 'OPTIONS') {
+            return 204;
+        }
+    }
+}
+EOF
+
+sudo ln -s /etc/nginx/sites-available/puppetdb-proxy /etc/nginx/sites-enabled/
+sudo nginx -t && sudo systemctl reload nginx
 ```
 
-### 9.3 Regular Backups
+## Optional: HTTPS Setup
 
-Backup the Supabase database regularly through the Supabase dashboard.
+### Using Let's Encrypt:
+
+```bash
+# Install Certbot
+sudo apt install -y certbot python3-certbot-nginx
+
+# Get certificate (replace your-domain.com)
+sudo certbot --nginx -d your-domain.com
+
+# Follow the prompts
+# Certificate will auto-renew every 90 days
+```
+
+### Using Self-Signed Certificate:
+
+```bash
+# Generate certificate
+sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+  -keyout /etc/ssl/private/puppet-ui.key \
+  -out /etc/ssl/certs/puppet-ui.crt
+
+# Update Nginx config
+sudo tee /etc/nginx/sites-available/puppet-ui > /dev/null << 'EOF'
+server {
+    listen 443 ssl;
+    server_name _;
+
+    ssl_certificate /etc/ssl/certs/puppet-ui.crt;
+    ssl_certificate_key /etc/ssl/private/puppet-ui.key;
+
+    root /var/www/puppet-ui;
+    index index.html;
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}
+
+server {
+    listen 80;
+    server_name _;
+    return 301 https://$server_name$request_uri;
+}
+EOF
+
+sudo nginx -t && sudo systemctl reload nginx
+```
 
 ## Troubleshooting
 
-### Issue: Cannot Connect to PuppetDB
+### Cannot Access Web UI
 
-**Solution:**
 ```bash
-# Test direct PuppetDB connection
-curl -k https://puppet.emudhra.local:8081/pdb/query/v4/nodes
+# Check Nginx is running
+sudo systemctl status nginx
 
-# Check Nginx proxy logs
+# Check Nginx error log
 sudo tail -f /var/log/nginx/error.log
 
-# Verify proxy is running
-sudo netstat -tulpn | grep :8082
+# Check firewall
+sudo ufw status
+
+# Restart Nginx
+sudo systemctl restart nginx
 ```
 
-### Issue: CORS Errors in Browser Console
+### Login Not Working
 
-**Solution:**
-Ensure the PuppetDB proxy configuration includes proper CORS headers. Check `/etc/nginx/sites-available/puppetdb-proxy`.
+- Default username: `admin`, password: `admin123`
+- Clear browser cache and localStorage (F12 → Application → Local Storage → Clear)
+- Refresh the page
 
-### Issue: Login Not Working
+### No Data Showing
 
-**Solution:**
 ```bash
-# Check Supabase connection
-# Verify .env file has correct credentials
-cat /var/www/puppet-ui/.env
+# Test PuppetDB connection
+curl http://localhost:8080/pdb/query/v4/nodes
 
-# Check if user exists in database
-# Run in Supabase SQL Editor:
-SELECT * FROM users WHERE email = 'admin@yourdomain.com';
+# If command fails, PuppetDB is not accessible
+# Check PuppetDB status
+sudo systemctl status puppetdb
+
+# Check PuppetDB logs
+sudo journalctl -u puppetdb -f
 ```
 
-### Issue: White Screen After Login
+### CORS Errors in Browser Console
 
-**Solution:**
+If you see CORS errors:
+1. PuppetDB must allow cross-origin requests
+2. Use the Nginx proxy solution (see "If PuppetDB Has CORS Issues" above)
+
+## Updating the Application
+
 ```bash
-# Check browser console for errors
-# Verify PuppetDB proxy is accessible
-curl http://localhost:8082/pdb/query/v4/nodes
+# Navigate to project
+cd /path/to/puppet-ui
 
-# Check Nginx error logs
+# Pull latest changes (if using git)
+git pull
+
+# Install any new dependencies
+npm install
+
+# Rebuild
+npm run build
+
+# Deploy updated files
+sudo cp -r dist/* /var/www/puppet-ui/
+
+# Clear browser cache or hard refresh (Ctrl+Shift+R)
+```
+
+## Maintenance
+
+### View Logs
+
+```bash
+# Nginx access log
+sudo tail -f /var/log/nginx/access.log
+
+# Nginx error log
 sudo tail -f /var/log/nginx/error.log
+```
+
+### Backup
+
+```bash
+# Backup Nginx config
+sudo cp /etc/nginx/sites-available/puppet-ui ~/puppet-ui-nginx-backup.conf
+
+# Note: User data is stored in browser localStorage (no server backup needed)
+```
+
+### Monitor Resources
+
+```bash
+# Check disk space
+df -h /var/www/puppet-ui
+
+# Check Nginx process
+ps aux | grep nginx
 ```
 
 ## Security Best Practices
 
-### 10.1 Restrict PuppetDB Proxy Access
+1. **Change default password immediately**
+2. **Use HTTPS in production**
+3. **Keep system updated**: `sudo apt update && sudo apt upgrade`
+4. **Restrict firewall**: Only allow necessary ports
+5. **Use strong passwords**: For all user accounts
+6. **Regular updates**: Keep application updated
 
-Edit `/etc/nginx/sites-available/puppetdb-proxy`:
+## System Requirements
 
-```nginx
-# Only allow local connections
-listen 127.0.0.1:8082;
-```
+### Minimum:
+- 1 CPU core
+- 512MB RAM
+- 1GB disk space
 
-### 10.2 Enable Fail2Ban
+### Recommended:
+- 2 CPU cores
+- 1GB RAM
+- 5GB disk space
 
-```bash
-sudo apt install -y fail2ban
-sudo systemctl enable fail2ban
-sudo systemctl start fail2ban
-```
-
-### 10.3 Regular Updates
-
-```bash
-# Update system packages weekly
-sudo apt update && sudo apt upgrade -y
-
-# Update Node.js packages
-cd /var/www/puppet-ui
-npm audit fix
-```
-
-## Alternative Deployment Options
-
-### Option 1: Using Docker
-
-Create a `Dockerfile`:
-
-```dockerfile
-FROM node:20-alpine
-
-WORKDIR /app
-
-COPY package*.json ./
-RUN npm ci --only=production
-
-COPY . .
-RUN npm run build
-
-FROM nginx:alpine
-COPY --from=0 /app/dist /usr/share/nginx/html
-COPY nginx.conf /etc/nginx/conf.d/default.conf
-
-EXPOSE 80
-CMD ["nginx", "-g", "daemon off;"]
-```
-
-Build and run:
-
-```bash
-docker build -t puppet-ui .
-docker run -d -p 80:80 puppet-ui
-```
-
-### Option 2: Using PM2 with Preview Server
-
-```bash
-cd /var/www/puppet-ui
-npm install -g serve
-pm2 start "serve -s dist -p 3000" --name puppet-ui
-pm2 save
-pm2 startup
-```
-
-## Accessing Different Puppet Master Environments
-
-If you have multiple Puppet Masters or environments:
-
-### Edit PuppetDB URL Configuration
-
-Create environment-specific builds:
-
-```bash
-# Production environment
-VITE_PUPPETDB_URL=http://prod-puppet.local:8082 npm run build
-
-# Staging environment
-VITE_PUPPETDB_URL=http://staging-puppet.local:8082 npm run build
-```
-
-Or use Nginx to proxy multiple PuppetDB instances:
-
-```nginx
-# Add to Nginx configuration
-location /api/prod/ {
-    proxy_pass https://prod-puppet.emudhra.local:8081/;
-    # Add CORS headers...
-}
-
-location /api/staging/ {
-    proxy_pass https://staging-puppet.emudhra.local:8081/;
-    # Add CORS headers...
-}
-```
-
-## Support and Additional Resources
-
-- PuppetDB API Documentation: https://puppet.com/docs/puppetdb/latest/api/
-- Supabase Documentation: https://supabase.com/docs
-- Nginx Documentation: https://nginx.org/en/docs/
-
-## Quick Reference Commands
+## Common Commands
 
 ```bash
 # Restart Nginx
 sudo systemctl restart nginx
 
+# Reload Nginx (no downtime)
+sudo systemctl reload nginx
+
+# Test Nginx config
+sudo nginx -t
+
+# View Nginx status
+sudo systemctl status nginx
+
 # Rebuild application
-cd /var/www/puppet-ui && npm run build
+cd /path/to/puppet-ui && npm run build
 
-# Check application logs
-sudo tail -f /var/log/nginx/access.log
-
-# Test PuppetDB connection
-curl http://localhost:8082/pdb/query/v4/nodes
-
-# Backup configuration
-sudo tar -czf puppet-ui-backup-$(date +%Y%m%d).tar.gz /var/www/puppet-ui /etc/nginx/sites-available/puppet-ui /etc/nginx/sites-available/puppetdb-proxy
+# Deploy changes
+sudo cp -r dist/* /var/www/puppet-ui/
 ```
+
+## Support
+
+For issues:
+1. Check browser console (F12) for JavaScript errors
+2. Check Nginx error log: `sudo tail -f /var/log/nginx/error.log`
+3. Verify PuppetDB: `curl http://localhost:8080/pdb/query/v4/nodes`
+4. See README.md for more troubleshooting
 
 ---
 
-Your Puppet Master Web UI is now deployed and ready for production use!
+**Your Puppet infrastructure is now web-accessible!**

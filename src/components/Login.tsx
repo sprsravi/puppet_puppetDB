@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { LogIn, Lock, Mail } from 'lucide-react';
+import { LogIn, Lock, User as UserIcon } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 export const Login: React.FC = () => {
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -15,7 +15,7 @@ export const Login: React.FC = () => {
     setLoading(true);
 
     try {
-      await login(email, password);
+      await login(username, password);
     } catch (err) {
       setError('Invalid credentials. Please try again.');
       console.error(err);
@@ -45,19 +45,19 @@ export const Login: React.FC = () => {
 
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-slate-200 mb-2">
-                Email Address
+              <label htmlFor="username" className="block text-sm font-medium text-slate-200 mb-2">
+                Username
               </label>
               <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
                 <input
-                  id="email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  id="username"
+                  type="text"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
                   required
                   className="w-full pl-11 pr-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition"
-                  placeholder="you@example.com"
+                  placeholder="admin"
                 />
               </div>
             </div>
@@ -104,7 +104,7 @@ export const Login: React.FC = () => {
 
           <div className="mt-6 pt-6 border-t border-white/10">
             <p className="text-center text-sm text-slate-400">
-              Secure access to Puppet infrastructure management
+              Default: username: <span className="text-slate-300 font-mono">admin</span>, password: <span className="text-slate-300 font-mono">admin123</span>
             </p>
           </div>
         </div>
